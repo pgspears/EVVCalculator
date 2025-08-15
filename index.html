@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Medicaid Waiver Service Billable Calculator</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- Optional: Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    /* Overall page background */
+    body {
+      background: #f0f2f5;
+      transition: background 0.3s, color 0.3s;
+    }
+    /* Dark mode styling */
+    body.dark-mode {
+      background: #121212;
+      color: #f0f2f5;
+    }
+    body.dark-mode .card {
+      background: #1e1e1e;
+      color: #f0f2f5;
+    }
+    body.dark-mode .btn-info {
+      background-color: #0dcaf0;
+      border-color: #0dcaf0;
+    }
+    /* Card styling */
+    .card {
+      margin-top: 20px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    /* Limit the width of the time inputs */
+    .time-input {
+      max-width: 120px;
+    }
+    /* Details row */
+    .details-row {
+      display: none;
+      transition: opacity 0.5s ease-in-out;
+    }
+    /* Details box: left-aligned explanation */
+    .details-box {
+      background-color: #e9ecef;
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 10px;
+      text-align: left;
+    }
+    body.dark-mode .details-box {
+      background-color: #333;
+      color: #f0f2f5;
+    }
+    /* Center align table headers and cells */
+    .table th, .table td {
+      text-align: center;
+      vertical-align: middle;
+    }
+    /* Standardize button spacing */
+    .btn-group > .btn {
+      margin-right: 2px;
+    }
+    .btn-group > .btn:last-child {
+      margin-right: 0;
+    }
+    .fade-in {
+      animation: fadeIn 0.5s;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    /* Toast container in bottom right */
+    #toastContainer {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      z-index: 1055;
+    }
+  </style>
+</head>
+<body>
+  <!-- Dark Mode Toggle and Header -->
+  <div class="container my-3 d-flex justify-content-between align-items-center">
+    <h1 class="h3">Medicaid Waiver Service Billable Calculator</h1>
+    <div>
+      <label class="form-check-label me-2" for="darkModeToggle">Dark Mode</label>
+      <input type="checkbox" id="darkModeToggle" class="form-check-input" />
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-header bg-primary text-white">
+        <h2 class="mb-0">Billing Calculator</h2>
+      </div>
+      <div class="card-body">
+        <p class="card-text">
+  Enter service start and end times below to calculate the elapsed minutes, raw units, billable units, and billable amounts. 
+  The calculator normally computes the billable units automatically based on the time inputs. However, if you prefer to enter the Billable Units manually, 
+  click the "Manual" button in the Actions column to toggle manual mode. Once enabled, simply type a value (between 0 and 96) into the Billable Units field, 
+  and the Billable Amount will update automatically based on the unit rate.
+</p>
+
+
+        <!-- New Service Code Addition Form -->
+        <div class="mb-4 border p-3 rounded bg-white">
+          <h5>Add New Service</h5>
+          <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+              <label for="newServiceCode" class="form-label">Service Code</label>
+              <input type="text" id="newServiceCode" class="form-control" placeholder="e.g., OT" />
+            </div>
+            <div class="col-md-4">
+              <label for="newUnitRate" class="form-label">Unit Rate ($)</label>
+              <input type="number" id="newUnitRate" class="form-control" placeholder="e.g., 10.50" step="0.01" min="0" />
+            </div>
+            <div class="col-md-4">
+              <button class="btn btn-success w-100" onclick="addNewService()">
+                <i class="bi bi-plus-circle"></i> Add Service
+              </button>
+            </div>
+          </div>
+          <div id="newServiceMessage" class="mt-2"></div>
+        </div>
+
+        <!-- Global Action Buttons -->
+        <div class="d-flex justify-content-end mb-3">
+          <button class="btn btn-outline-secondary me-2" onclick="resetAll()">
+            <i class="bi bi-arrow-counterclockwise"></i> Reset All
+          </button>
+          <button class="btn btn-outline-primary me-2" onclick="exportCSV()">
+            <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
+          </button>
+          <button class="btn btn-outline-dark" onclick="printPage()">
+            <i class="bi bi-printer"></i> Print
+          </button>
+        </div>
+
+        <!-- Service Table -->
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle" id="serviceTable">
+            <thead class="table-light">
+              <tr>
+                <th>Service Code</th>
+                <th>Unit Rate ($)</th>
+                <th>Start Time</th>
+                <th>End Time</th>
+                <th>Elapsed Minutes</th>
+                <th>Raw Units (min/15)</th>
+                <th>Billable Units</th>
+                <th>Billable Amount</th>
+                <th>Details</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="serviceTableBody">
+              <!-- Rows generated dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Summary Section -->
+        <div id="summarySection" class="mt-3 alert alert-info">
+          <strong>Total Billable Amount for all services: $0.00</strong>
+        </div>
+      </div>
+      <div class="card-footer text-muted text-center">
+        &copy; 2025 Patrick Spears
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div id="toastContainer"></div>
+
+  <!-- Bootstrap Bundle with Popper -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    /***********************
+     * Dark Mode Toggle    *
+     ***********************/
+    const darkModeToggle = document.getElementById("darkModeToggle");
+    darkModeToggle.addEventListener("change", function() {
+      document.body.classList.toggle("dark-mode", darkModeToggle.checked);
+    });
+
+    /***********************
+     * Persistent Services *
+     ***********************/
+    const defaultServices = {
+      "CLS": 8.31,
+      "Homemaker": 9.75,
+      "PA": 9.14,
+      "Respite": 5.92,
+      "PC": 11.25
+    };
+    let services = JSON.parse(localStorage.getItem("services")) || defaultServices;
+    function saveServices() {
+      localStorage.setItem("services", JSON.stringify(services));
+    }
+
+    /***********************
+     * Table Rendering     *
+     ***********************/
+    function generateServiceRow(serviceCode) {
+      const unitRate = parseFloat(services[serviceCode]).toFixed(2);
+      return `
+        <tr id="row-${serviceCode}" class="fade-in">
+          <td class="text-center service-code-cell">${serviceCode}</td>
+          <td class="text-center unit-rate-cell">${unitRate}</td>
+          <td class="text-center">
+            <input type="time" id="start-${serviceCode}" class="form-control time-input" aria-label="Start time for ${serviceCode}" />
+          </td>
+          <td class="text-center">
+            <input type="time" id="end-${serviceCode}" class="form-control time-input" aria-label="End time for ${serviceCode}" />
+          </td>
+          <td id="elapsed-${serviceCode}" class="text-center"></td>
+          <td id="rawUnits-${serviceCode}" class="text-center"></td>
+          <td class="text-center">
+            <input type="number" id="billableUnits-${serviceCode}" class="form-control" style="width:80px;" min="0" max="96" readonly oninput="updateCalculations('${serviceCode}')" />
+          </td>
+          <td id="billableAmount-${serviceCode}" class="text-center"></td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-info" onclick="toggleDetails('${serviceCode}')" aria-label="Toggle details for ${serviceCode}">
+              Details
+            </button>
+          </td>
+          <td class="text-center">
+            <div class="btn-group" role="group">
+              <button class="btn btn-sm btn-secondary" onclick="toggleManual('${serviceCode}')" aria-label="Toggle manual override for ${serviceCode}">Manual</button>
+              <button class="btn btn-sm btn-warning" onclick="editService('${serviceCode}')" aria-label="Edit ${serviceCode}">Edit</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteService('${serviceCode}')" aria-label="Delete ${serviceCode}">Delete</button>
+            </div>
+          </td>
+        </tr>
+        <tr id="details-${serviceCode}" class="details-row">
+          <td colspan="10">
+            <div id="detailsBox-${serviceCode}" class="details-box"></div>
+          </td>
+        </tr>
+      `;
+    }
+    function renderServiceTable() {
+      const tableBody = document.getElementById("serviceTableBody");
+      tableBody.innerHTML = "";
+      for (const serviceCode in services) {
+        tableBody.insertAdjacentHTML("beforeend", generateServiceRow(serviceCode));
+        attachTimeListeners(serviceCode);
+      }
+      updateSummary();
+    }
+
+    /****************************
+     * Calculation Functions    *
+     ****************************/
+    function calculateElapsedMinutes(startTime, endTime) {
+      if (!startTime || !endTime) return null;
+      const [startHours, startMinutes] = startTime.split(":").map(Number);
+      const [endHours, endMinutes] = endTime.split(":").map(Number);
+      const startTotal = startHours * 60 + startMinutes;
+      let endTotal = endHours * 60 + endMinutes;
+      let spansMidnight = false;
+      if (endTotal < startTotal) {
+        endTotal += 24 * 60;
+        spansMidnight = true;
+      }
+      return { minutes: endTotal - startTotal, spansMidnight, startTotal, endTotal };
+    }
+    function calculateBillableUnits(elapsed) {
+      if (elapsed < 8) return 0;
+      return Math.floor((elapsed - 8) / 15) + 1;
+    }
+    function updateCalculations(serviceCode) {
+      const startInput = document.getElementById(`start-${serviceCode}`);
+      const endInput = document.getElementById(`end-${serviceCode}`);
+      const elapsedDisplay = document.getElementById(`elapsed-${serviceCode}`);
+      const rawUnitsDisplay = document.getElementById(`rawUnits-${serviceCode}`);
+      const billableUnitsInput = document.getElementById(`billableUnits-${serviceCode}`);
+      const billableAmountDisplay = document.getElementById(`billableAmount-${serviceCode}`);
+      const detailsBox = document.getElementById(`detailsBox-${serviceCode}`);
+      const unitRate = services[serviceCode];
+      const startTime = startInput.value;
+      const endTime = endInput.value;
+
+      // If times are missing, still update billable amount in manual mode.
+      if (!startTime || !endTime) {
+        elapsedDisplay.textContent = "";
+        rawUnitsDisplay.textContent = "";
+        if (billableUnitsInput.hasAttribute("readonly")) {
+          billableUnitsInput.value = "";
+          billableAmountDisplay.textContent = "";
+        } else {
+          const manualVal = parseInt(billableUnitsInput.value) || 0;
+          billableAmountDisplay.textContent = `$${(manualVal * unitRate).toFixed(2)}`;
+        }
+        detailsBox.innerHTML = "";
+        updateSummary();
+        return;
+      }
+
+      const result = calculateElapsedMinutes(startTime, endTime);
+      const elapsed = result.minutes;
+      const rawUnits = (elapsed / 15).toFixed(2);
+      const autoBillableUnits = calculateBillableUnits(elapsed);
+      
+      if (billableUnitsInput.hasAttribute("readonly")) {
+        billableUnitsInput.value = autoBillableUnits;
+        billableAmountDisplay.textContent = `$${(autoBillableUnits * unitRate).toFixed(2)}`;
+      } else {
+        const manualVal = parseInt(billableUnitsInput.value) || 0;
+        billableAmountDisplay.textContent = `$${(manualVal * unitRate).toFixed(2)}`;
+      }
+      
+      elapsedDisplay.textContent = elapsed + (result.spansMidnight ? " (spans midnight)" : "");
+      rawUnitsDisplay.textContent = rawUnits;
+      
+      let detailsHTML = `<strong>Elapsed Time Calculation for ${serviceCode}:</strong><br>`;
+      detailsHTML += `<p>This breakdown shows how the total elapsed time is derived:</p>`;
+      detailsHTML += `<em>Step 1:</em> Convert Start Time (${startTime}) to minutes:<br>`;
+      detailsHTML += `&nbsp;&nbsp;${Math.floor(result.startTotal / 60)} × 60 + ${result.startTotal % 60} = ${result.startTotal} minutes<br>`;
+      detailsHTML += `<em>Step 2:</em> Convert End Time (${endTime}) to minutes:<br>`;
+      detailsHTML += `&nbsp;&nbsp;${Math.floor((result.endTotal - (result.spansMidnight ? 1440 : 0)) / 60)} × 60 + ${(result.endTotal - (result.spansMidnight ? 1440 : 0)) % 60} = ${result.endTotal - (result.spansMidnight ? 1440 : 0)} minutes${result.spansMidnight ? " (service spans midnight; 1440 minutes added)" : ""}<br>`;
+      detailsHTML += `<em>Step 3:</em> Total Elapsed Time = Adjusted End Minutes - Start Minutes:<br>`;
+      detailsHTML += `&nbsp;&nbsp;${result.spansMidnight ? result.endTotal : result.endTotal} - ${result.startTotal} = ${elapsed} minutes<br>`;
+      detailsHTML += `<hr><strong>Raw Units Calculation:</strong><br>`;
+      detailsHTML += `<em>Step 4:</em> Raw Units = Elapsed Time ÷ 15 = ${elapsed} ÷ 15 = ${rawUnits}<br>`;
+      detailsHTML += `<hr><strong>Billable Units Calculation:</strong><br>`;
+      if (elapsed < 8) {
+        detailsHTML += `<em>Step 5:</em> Since elapsed time is less than 8 minutes, Billable Units = 0<br>`;
+      } else {
+        detailsHTML += `<em>Step 5:</em> Billable Units = floor((Elapsed Time − 8) ÷ 15) + 1 = floor((${elapsed} − 8) ÷ 15) + 1 = ${autoBillableUnits}<br>`;
+      }
+      detailsHTML += `<hr><strong>Billable Amount Calculation:</strong><br>`;
+      if (billableUnitsInput.hasAttribute("readonly")) {
+        detailsHTML += `<em>Step 6:</em> Billable Amount = Billable Units × Unit Rate = ${autoBillableUnits} × $${unitRate} = $${(autoBillableUnits * unitRate).toFixed(2)}<br>`;
+      } else {
+        const manualVal = parseInt(billableUnitsInput.value) || 0;
+        detailsHTML += `<em>Manual Override:</em> Billable Units entered = ${manualVal}<br>`;
+        detailsHTML += `<em>Step 6:</em> Billable Amount = Manual Billable Units × Unit Rate = ${manualVal} × $${unitRate} = $${(manualVal * unitRate).toFixed(2)}<br>`;
+      }
+      detailsHTML += `<p>These steps show exactly how your billing amount was computed.</p>`;
+      detailsBox.innerHTML = detailsHTML;
+      updateSummary();
+    }
+    function toggleDetails(serviceCode) {
+      updateCalculations(serviceCode);
+      const detailsRow = document.getElementById(`details-${serviceCode}`);
+      detailsRow.style.display = (detailsRow.style.display === "table-row") ? "none" : "table-row";
+    }
+    function attachTimeListeners(serviceCode) {
+      const startInput = document.getElementById(`start-${serviceCode}`);
+      const endInput = document.getElementById(`end-${serviceCode}`);
+      if (startInput && endInput) {
+        startInput.addEventListener("change", () => updateCalculations(serviceCode));
+        endInput.addEventListener("change", () => updateCalculations(serviceCode));
+      }
+    }
+
+    /****************************
+     * Toggle Manual Override   *
+     ****************************/
+    function toggleManual(serviceCode) {
+      const billableUnitsInput = document.getElementById(`billableUnits-${serviceCode}`);
+      if (billableUnitsInput.hasAttribute("readonly")) {
+        billableUnitsInput.removeAttribute("readonly");
+        billableUnitsInput.classList.add("bg-light");
+        billableUnitsInput.focus();
+        showToast(`Manual override enabled for ${serviceCode}`, "info");
+      } else {
+        billableUnitsInput.setAttribute("readonly", true);
+        billableUnitsInput.classList.remove("bg-light");
+        updateCalculations(serviceCode);
+        showToast(`Manual override disabled for ${serviceCode}`, "info");
+      }
+    }
+
+    /****************************
+     * Summary Calculation      *
+     ****************************/
+    function updateSummary() {
+      let totalBillableAmount = 0;
+      for (const serviceCode in services) {
+        const cell = document.getElementById(`billableAmount-${serviceCode}`);
+        if (cell && cell.textContent) {
+          const amount = parseFloat(cell.textContent.replace('$', '').trim());
+          if (!isNaN(amount)) {
+            totalBillableAmount += amount;
+          }
+        }
+      }
+      const summaryDiv = document.getElementById('summarySection');
+      summaryDiv.innerHTML = `<strong>Total Billable Amount for all services: $${totalBillableAmount.toFixed(2)}</strong>`;
+    }
+
+    /****************************
+     * Editing & Deletion       *
+     ****************************/
+    function editService(serviceCode) {
+      const row = document.getElementById(`row-${serviceCode}`);
+      row.dataset.originalHtml = row.innerHTML;
+      const serviceCodeCell = row.querySelector(".service-code-cell");
+      const unitRateCell = row.querySelector(".unit-rate-cell");
+      const currentCode = serviceCodeCell.textContent;
+      const currentRate = unitRateCell.textContent;
+      serviceCodeCell.innerHTML = `<input type="text" id="edit-service-code-${serviceCode}" class="form-control" value="${currentCode}" aria-label="Edit service code" />`;
+      unitRateCell.innerHTML = `<input type="number" id="edit-unit-rate-${serviceCode}" class="form-control" value="${currentRate}" step="0.01" min="0" aria-label="Edit unit rate" />`;
+      const actionsCell = row.cells[9];
+      actionsCell.innerHTML = `
+        <div class="btn-group" role="group">
+          <button class="btn btn-sm btn-success" onclick="saveServiceEdit('${serviceCode}')" aria-label="Save changes">Save</button>
+          <button class="btn btn-sm btn-secondary" onclick="cancelServiceEdit('${serviceCode}')" aria-label="Cancel edit">Cancel</button>
+        </div>
+      `;
+    }
+    function saveServiceEdit(oldCode) {
+      const newCode = document.getElementById(`edit-service-code-${oldCode}`).value.trim();
+      const newRate = parseFloat(document.getElementById(`edit-unit-rate-${oldCode}`).value);
+      if (!newCode) {
+        alert("Service code cannot be empty.");
+        return;
+      }
+      if (isNaN(newRate) || newRate < 0) {
+        alert("Please enter a valid unit rate.");
+        return;
+      }
+      if (newCode !== oldCode && services.hasOwnProperty(newCode)) {
+        alert("A service with this code already exists.");
+        return;
+      }
+      if (newCode !== oldCode) {
+        services[newCode] = newRate;
+        delete services[oldCode];
+        saveServices();
+        renderServiceTable();
+        showToast(`Service "${oldCode}" updated to "${newCode}"`, "success");
+      } else {
+        services[oldCode] = newRate;
+        saveServices();
+        const row = document.getElementById(`row-${oldCode}`);
+        row.querySelector(".service-code-cell").textContent = newCode;
+        row.querySelector(".unit-rate-cell").textContent = newRate.toFixed(2);
+        row.cells[9].innerHTML = `
+          <div class="btn-group" role="group">
+            <button class="btn btn-sm btn-secondary" onclick="toggleManual('${newCode}')" aria-label="Toggle manual override for ${newCode}">Manual</button>
+            <button class="btn btn-sm btn-warning" onclick="editService('${newCode}')" aria-label="Edit ${newCode}">Edit</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteService('${newCode}')" aria-label="Delete ${newCode}">Delete</button>
+          </div>
+        `;
+        showToast(`Service "${newCode}" updated successfully`, "success");
+      }
+    }
+    function cancelServiceEdit(serviceCode) {
+      const row = document.getElementById(`row-${serviceCode}`);
+      if (row.dataset.originalHtml) {
+        row.innerHTML = row.dataset.originalHtml;
+        delete row.dataset.originalHtml;
+        attachTimeListeners(serviceCode);
+        updateCalculations(serviceCode);
+      }
+    }
+    function deleteService(serviceCode) {
+      if (confirm(`Are you sure you want to delete service "${serviceCode}"?`)) {
+        delete services[serviceCode];
+        saveServices();
+        renderServiceTable();
+        showToast(`Service "${serviceCode}" deleted`, "danger");
+      }
+    }
+
+    /****************************
+     * Adding New Services      *
+     ****************************/
+    function addNewService() {
+      const codeInput = document.getElementById("newServiceCode");
+      const rateInput = document.getElementById("newUnitRate");
+      const messageDiv = document.getElementById("newServiceMessage");
+      const serviceCode = codeInput.value.trim();
+      const unitRate = parseFloat(rateInput.value);
+      if (!serviceCode) {
+        messageDiv.innerHTML = '<span class="text-danger">Please enter a valid service code.</span>';
+        return;
+      }
+      if (isNaN(unitRate) || unitRate < 0) {
+        messageDiv.innerHTML = '<span class="text-danger">Please enter a valid unit rate.</span>';
+        return;
+      }
+      if (services.hasOwnProperty(serviceCode)) {
+        messageDiv.innerHTML = '<span class="text-danger">Service code already exists!</span>';
+        return;
+      }
+      services[serviceCode] = unitRate;
+      saveServices();
+      renderServiceTable();
+      codeInput.value = "";
+      rateInput.value = "";
+      messageDiv.innerHTML = `<span class="text-success">Service "${serviceCode}" added successfully!</span>`;
+      showToast(`Service "${serviceCode}" added`, "success");
+    }
+
+    /****************************
+     * Global Action Functions  *
+     ****************************/
+    function resetAll() {
+      if (confirm("Are you sure you want to reset all time inputs?")) {
+        const timeInputs = document.querySelectorAll("input[type='time']");
+        timeInputs.forEach(input => input.value = "");
+        renderServiceTable();
+        showToast("All time inputs have been reset.", "info");
+      }
+    }
+    function exportCSV() {
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += "Service Code,Unit Rate,Start Time,End Time,Elapsed Minutes,Raw Units,Billable Units,Billable Amount\n";
+      for (const serviceCode in services) {
+        const row = document.getElementById(`row-${serviceCode}`);
+        if (row) {
+          const unitRate = row.querySelector(".unit-rate-cell").textContent;
+          const startTime = document.getElementById(`start-${serviceCode}`).value;
+          const endTime = document.getElementById(`end-${serviceCode}`).value;
+          const elapsed = document.getElementById(`elapsed-${serviceCode}`).textContent;
+          const rawUnits = document.getElementById(`rawUnits-${serviceCode}`).textContent;
+          const billableUnits = document.getElementById(`billableUnits-${serviceCode}`).value;
+          const billableAmount = document.getElementById(`billableAmount-${serviceCode}`).textContent;
+          csvContent += `${serviceCode},${unitRate},${startTime},${endTime},${elapsed},${rawUnits},${billableUnits},${billableAmount}\n`;
+        }
+      }
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "medicaid_billing.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("CSV exported successfully.", "info");
+    }
+    function printPage() {
+      window.print();
+    }
+
+    /****************************
+     * Toast Notifications      *
+     ****************************/
+    function showToast(message, type) {
+      const toastContainer = document.getElementById("toastContainer");
+      const toastId = "toast-" + Date.now();
+      const toastHTML = `
+        <div id="${toastId}" class="toast align-items-center text-bg-${type} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body">
+              ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      `;
+      toastContainer.insertAdjacentHTML("beforeend", toastHTML);
+      const toastEl = document.getElementById(toastId);
+      const bsToast = new bootstrap.Toast(toastEl, { delay: 3000 });
+      bsToast.show();
+      toastEl.addEventListener("hidden.bs.toast", function() {
+        toastEl.remove();
+      });
+    }
+
+    /****************************
+     * Initialization on Load   *
+     ****************************/
+    document.addEventListener("DOMContentLoaded", () => {
+      renderServiceTable();
+    });
+  </script>
+</body>
+</html>
